@@ -1,1 +1,8 @@
-discord.py==1.7.3
+hikari[speedups]
+hikari-lightbulb
+apscheduler
+aiosqlite
+aiofiles
+uvloop
+python-dotenv
+git+https://github.com/FasterSpeeding/Sake
