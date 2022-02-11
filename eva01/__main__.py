@@ -15,7 +15,8 @@ bot = lightbulb.BotApp(
     prefix="$",
     default_enabled_guilds=int(os.environ['DEFAULT_GUILD_ID']),
     help_slash_command=True,
-    case_insensitive_prefix_commands=True
+    case_insensitive_prefix_commands=True,
+    intents=hikari.Intents.ALL
 )
 
 bot.d.scheduler = AsyncIOScheduler()
@@ -25,7 +26,7 @@ bot.d.scheduler.configure(timezone=utc)
 
 @bot.listen(hikari.StartingEvent)
 async def on_starting(event: hikari.StartingEvent) -> None:
-    cache = sake.redis.RedisCache("redis://127.0.0.1", bot, bot)
+    cache = sake.redis.RedisCache("redis://127.0.0.1:6379", bot, bot)
     await cache.open()
     log.info("Connected to Redis.")
 
@@ -38,12 +39,38 @@ async def on_started(event: hikari.StartedEvent) -> None:
 
 @bot.listen(hikari.ExceptionEvent)
 async def on_error(event: hikari.ExceptionEvent) -> None:
-    ...
+    raise event.exception
+
 
 @bot.listen(lightbulb.CommandErrorEvent)
 async def on_command_error(event: lightbulb.CommandErrorEvent) -> None:
-    ...
+    if isinstance(event, lightbulb.CommandErrorEvent):
+        return
+    
+    if isinstance(event, lightbulb.NotEnoughArguments):
+        await event.context.respond(
+            "There are some missing arguments: " + ", ".join(event.exception.missing_args)
+        )
+        return
 
+    if isinstance(event.exception, lightbulb.ConverterFailure):
+        await event.context.respond(
+            f"The '{event.exception.option}' option is invalid."
+        )
+        return
+    
+    if isinstance(event, lightbulb.CommandIsOnCooldown):
+        await event.context.respond(
+            f"Command is in cooldown. Try again in {event.exception.retry_after:.0f} seconds"
+        )
+        return
+    
+    await event.context.respond("Critic levels of power... ||MASSIVE ERROR|| ! ! !")
+    
+    if isinstance(event.exception, lightbulb.CommandInvocationError):
+        raise event.exception.original
+    
+    raise event.exception
 
 @bot.command()
 @lightbulb.command("shutdown", "Close the connections of the bot.")
@@ -55,8 +82,16 @@ async def shutdown(ctx: lightbulb.context.Context) -> None:
 @bot.command()
 @lightbulb.command("ping", "Says pong.")
 @lightbulb.implements(commands.PrefixCommand, commands.SlashCommand)
-async def shutdown(ctx: lightbulb.context.Context) -> None:
+async def ping(ctx: lightbulb.context.Context) -> None:
     await ctx.respond("Pong.")
+
+@bot.command()
+@lightbulb.command("deploy", "Use to deploy a serverless project.")
+@lightbulb.implements(commands.PrefixCommand, commands.SlashCommand)
+async def deploy(ctx: lightbulb.context.Context) -> None:
+    print("Test deploy - core")
+    os.system("cd core-repositories/ && cd redcore-core/ && git checkout master && git pull && serverless deploy")
+    await ctx.respond("Test deploy - core.")
 
 if __name__ == "__main__":
     if os.name != "nt":
